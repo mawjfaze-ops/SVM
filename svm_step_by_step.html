@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVM Step-by-Step Solver</title>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --panel2: #263548;
+    --ink: #e2e8f0; --mut: #94a3b8; --acc: #38bdf8;
+    --good: #34d399; --bad: #f87171; --warn: #fbbf24;
+    --line: #334155; --mono: "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink);
+         font-family: "Segoe UI", system-ui, sans-serif; line-height: 1.55; }
+  header { padding: 22px 28px; border-bottom: 1px solid var(--line);
+           background: linear-gradient(90deg, #16213a, #0f172a); }
+  header h1 { font-size: 1.25rem; letter-spacing: .5px; }
+  header p  { color: var(--mut); font-size: .85rem; margin-top: 3px; }
+  main { max-width: 980px; margin: 0 auto; padding: 22px; display: grid;
+         grid-template-columns: 330px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 12px; padding: 16px 18px; margin-bottom: 18px; }
+  .card h2 { font-size: .95rem; color: var(--acc); text-transform: uppercase;
+             letter-spacing: 1px; margin-bottom: 12px;
+             border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  label { display: block; font-size: .8rem; color: var(--mut); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; background: var(--panel2);
+      color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+      padding: 8px 10px; font-family: var(--mono); font-size: .82rem; }
+  textarea { min-height: 150px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--acc); }
+  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
+  button { cursor: pointer; border: none; border-radius: 8px; font-weight: 600; }
+  .btn-main { width: 100%; margin-top: 16px; padding: 12px;
+      background: linear-gradient(90deg, #0ea5e9, #38bdf8); color: #06202e;
+      font-size: .95rem; }
+  .btn-main:hover { filter: brightness(1.1); }
+  .btn-demo { padding: 6px 10px; background: var(--panel2); color: var(--mut);
+      border: 1px solid var(--line); font-size: .75rem; }
+  .btn-demo:hover { color: var(--acc); border-color: var(--acc); }
+  .demos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem;
+          font-family: var(--mono); margin: 6px 0; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--mut); font-weight: 600; font-size: .72rem;
+       text-transform: uppercase; letter-spacing: .5px; }
+  tr.sv td { background: rgba(56,189,248,.08); }
+  tr.bad td { background: rgba(248,113,113,.10); }
+  .tag { display: inline-block; padding: 2px 9px; border-radius: 20px;
+         font-size: .7rem; font-weight: 700; }
+  .tag.sv  { background: rgba(56,189,248,.18); color: var(--acc); }
+  .tag.ok  { background: rgba(52,211,153,.15); color: var(--good); }
+  .tag.bad { background: rgba(248,113,113,.15); color: var(--bad); }
+  .tag.warn{ background: rgba(251,191,36,.15); color: var(--warn); }
+  .eq { font-family: var(--mono); background: var(--panel2);
+        border-left: 3px solid var(--acc); border-radius: 6px;
+        padding: 10px 14px; margin: 8px 0; font-size: .85rem;
+        overflow-x: auto; white-space: nowrap; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px;
+        font-family: var(--mono); font-size: .85rem; }
+  .kv b { color: var(--acc); font-weight: 600; }
+  .muted { color: var(--mut); font-size: .78rem; }
+  .step { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 12px; padding: 16px 18px; margin-bottom: 18px; }
+  .step h3 { font-size: .95rem; color: var(--acc); text-transform: uppercase;
+             letter-spacing: 1px; margin-bottom: 10px; }
+  .placeholder { color: var(--mut); text-align: center; padding: 60px 10px;
+                 border: 1px dashed var(--line); border-radius: 12px; }
+  .hl { font-family: var(--mono); }
+  footer { text-align: center; color: var(--mut); font-size: .75rem;
+           padding: 20px; border-top: 1px solid var(--line); }
+</style>
+<base target="_blank">
+</head>
+<body>
+
+<header>
+  <h1>🤖 Support Vector Machine — Step-by-Step Solver</h1>
+  <p>Dual formulation · SMO optimization · KKT conditions · Hard / Soft margin · Kernels</p>
+</header>
+
+<main>
+  <!-- ===================== INPUT PANEL ===================== -->
+  <div>
+    <div class="card">
+      <h2>① Problem Setup</h2>
+
+      <label>Training data — one per line: <span class="hl">x1, x2, … ; y</span></label>
+      <textarea id="data">2, 2 ; +1
+3, 3 ; +1
+3, 1 ; +1
+1, 2 ; -1
+0, 0 ; -1
+1, 0 ; -1</textarea>
+
+      <label>Margin type</label>
+      <select id="ctype">
+        <option value="hard">Hard-margin (C = ∞)</option>
+        <option value="soft">Soft-margin</option>
+      </select>
+
+      <div class="row" id="crow" style="display:none">
+        <div><label>C (slack trade-off)</label>
+          <input id="cval" type="number" value="1" step="0.1" min="0.001"></div>
+        <div></div>
+      </div>
+
+      <label>Kernel K(xᵢ, xⱼ)</label>
+      <select id="kernel">
+        <option value="linear">Linear — xᵢᵀxⱼ</option>
+        <option value="poly">Polynomial — (γxᵢᵀxⱼ + r)ᵈ</option>
+        <option value="rbf">RBF / Gaussian — exp(−γ‖xᵢ−xⱼ‖²)</option>
+        <option value="sigmoid">Sigmoid — tanh(γxᵢᵀxⱼ + r)</option>
+      </select>
+
+      <div class="row">
+        <div><label>γ (gamma)</label>
+          <input id="gamma" type="number" value="1" step="0.1"></div>
+        <div><label>r (coef)</label>
+          <input id="coef" type="number" value="1" step="0.5"></div>
+        <div><label>d (degree)</label>
+          <input id="deg" type="number" value="3" step="1" min="1"></div>
+      </div>
+
+      <button class="btn-main" id="solve">Solve SVM ➜</button>
+
+      <div class="demos">
+        <button class="btn-demo" data-demo="1">Demo 1 · hard linear</button>
+        <button class="btn-demo" data-demo="2">Demo 2 · soft C=1</button>
+        <button class="btn-demo" data-demo="3">Demo 3 · RBF (XOR)</button>
+      </div>
+    </div>
+
+    <div class="card" id="predcard" style="display:none">
+      <h2>⑬ Predict a New Point</h2>
+      <label>x* = (comma separated)</label>
+      <div class="row">
+        <input id="newx" placeholder="2.5, 2.5">
+        <button class="btn-demo" id="predbtn" style="padding:8px 14px">Classify</button>
+      </div>
+      <div id="predout" class="eq" style="display:none; white-space:normal"></div>
+    </div>
+  </div>
+
+  <!-- ===================== OUTPUT PANEL ===================== -->
+  <div id="out">
+    <div class="placeholder">Configure the problem on the left and press
+      <b>Solve SVM</b>.<br><br>The full derivation will appear here:<br>
+      topic → data → dual → α → support vectors → w, b → margin →
+      hinge loss → hyperplane → verification table.</div>
+  </div>
+</main>
+
+<footer>min ½‖w‖² + C·Σξᵢ &nbsp; s.t. &nbsp; yᵢ(wᵀxᵢ+b) ≥ 1−ξᵢ, &nbsp; ξᵢ ≥ 0
+  &nbsp;—&nbsp; solved via its Wolfe dual with the SMO algorithm</footer>
+
+<script>
+/* ======================================================================
+   PURE SOLVER (no DOM dependencies — testable in Node)
+   ====================================================================== */
+"use strict";
+
+function dot(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i]*b[i]; return s; }
+
+function makeKernel(name, g, r, d) {
+  if (name === "linear")  return (a,b) => dot(a,b);
+  if (name === "poly")    return (a,b) => Math.pow(g*dot(a,b) + r, d);
+  if (name === "sigmoid") return (a,b) => Math.tanh(g*dot(a,b) + r);
+  // rbf
+  return (a,b) => { let s = 0; for (let i = 0; i < a.length; i++) s += (a[i]-b[i])**2;
+                    return Math.exp(-g*s); };
+}
+
+/* ---- SMO (Platt's Simplified Sequential Minimal Optimization) --------
+   Maximizes  W(α) = Σαᵢ − ½ΣΣαᵢαⱼyᵢyⱼKᵢⱼ
+   s.t. Σαᵢyᵢ = 0,  0 ≤ αᵢ ≤ C.  KKT: αᵢ=0 ⇒ yᵢfᵢ≥1; 0<αᵢ<C ⇒ yᵢfᵢ=1;
+        αᵢ=C ⇒ yᵢfᵢ≤1.                                              */
+function solveSVM(X, y, opts) {
+  const n = X.length;
+  const C = opts.C === null || opts.C === undefined ? Infinity : opts.C;
+  const tol = 1e-3, eps = 1e-5, maxIter = 20000;
+  const K = X.map(a => X.map(b => opts.kernelFn(a, b)));
+  const alpha = new Array(n).fill(0);
+  const f = new Array(n).fill(0);            // decision values without b
+  let passes = 0, iter = 0;
+
+  while (passes < 8 && iter++ < maxIter) {
+    let changed = 0;
+    for (let i = 0; i < n; i++) {
+      const Ei = f[i] - y[i];
+      const ri = Ei * y[i];
+      const violLow  = ri < -tol && alpha[i] < (C === Infinity ? 1e10 : C);
+      const violHigh = ri >  tol && alpha[i] > 0;
+      if (!violLow && !violHigh) continue;
+      // pick j maximizing |Ei - Ej|
+      let j = -1, best = -1;
+      for (let k = 0; k < n; k++) {
+        if (k === i) continue;
+        const d = Math.abs(Ei - (f[k] - y[k]));
+        if (d > best) { best = d; j = k; }
+      }
+      const Ej = f[j] - y[j];
+      const aiOld = alpha[i], ajOld = alpha[j];
+      // box constraints L, H
+      let L, H;
+      if (y[i] !== y[j]) { L = Math.max(0, ajOld - aiOld);
+                           H = Math.min(C === Infinity ? 1e10 : C, C === Infinity ? 1e10 : C + ajOld - aiOld); }
+      else               { L = Math.max(0, aiOld + ajOld - (C === Infinity ? 1e10 : C));
+                           H = Math.min(C === Infinity ? 1e10 : C, aiOld + ajOld); }
+      if (L >= H) continue;
+      const eta = K[i][i] + K[j][j] - 2*K[i][j];
+      if (eta <= 0) continue;
+      let aj = ajOld + y[j]*(Ei - Ej)/eta;
+      aj = Math.min(H, Math.max(L, aj));
+      if (Math.abs(aj - ajOld) < eps) { alpha[j] = aj; continue; }
+      const ai = aiOld + y[i]*y[j]*(ajOld - aj);
+      alpha[i] = ai; alpha[j] = aj;
+      for (let k = 0; k < n; k++)
+        f[k] += (ai - aiOld)*y[i]*K[i][k] + (aj - ajOld)*y[j]*K[j][k];
+      changed++;
+    }
+    passes = changed === 0 ? passes + 1 : 0;
+  }
+
+  // ---- dual objective value W(α) ----
+  let W = 0; for (let i = 0; i < n; i++) W += alpha[i];
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++)
+    W -= 0.5 * alpha[i]*alpha[j]*y[i]*y[j]*K[i][j];
+
+  // ---- support vectors ----
+  const svIdx = []; for (let i = 0; i < n; i++) if (alpha[i] > 1e-4) svIdx.push(i);
+
+  // ---- b from free support vectors (α < C)  [Sections 10 & 11] ----
+  const freeIdx = svIdx.filter(i => C === Infinity || alpha[i] < C - 1e-4);
+  const useIdx  = freeIdx.length ? freeIdx : svIdx;
+  const bCand   = useIdx.map(i => y[i] - f[i]);
+  const b       = bCand.reduce((s,v) => s+v, 0) / bCand.length;
+
+  const dec = x => {                     // decision function, no b
+    let s = 0;
+    for (let i = 0; i < n; i++) if (alpha[i] > 0) s += alpha[i]*y[i]*opts.kernelFn(X[i], x);
+    return s;
+  };
+  const fx = x => dec(x) + b;
+  const predict = x => Math.sign(fx(x)) >= 0 ? (fx(x) === 0 ? 1 : Math.sign(fx(x))) : -1;
+
+  return { alpha, b, bCand, W, svIdx, freeIdx, K, f, dec, fx, predict,
+           isLinear: opts.kernelName === "linear", kernelName: opts.kernelName };
+}
+
+/* ---- full report: everything the step-by-step prompt asks for ---- */
+function buildReport(X, y, C, kernelName, kp) {
+  const kernelFn = makeKernel(kernelName, kp.g, kp.r, kp.d);
+  const sol = solveSVM(X, y, { C, kernelFn, kernelName });
+  const n = X.length, d = X[0].length;
+  const hard = C === null || C === undefined;
+
+  // w = Σαᵢyᵢxᵢ  (linear kernel only)
+  let w = null;
+  if (sol.isLinear) {
+    w = new Array(d).fill(0);
+    for (let i = 0; i < n; i++)
+      if (sol.alpha[i] > 0)
+        for (let j = 0; j < d; j++) w[j] += sol.alpha[i]*y[i]*X[i][j];
+  }
+  const normW = w ? Math.sqrt(dot(w, w)) : null;
+  const margin = normW ? 2/normW : null;
+
+  // per-point values
+  const pts = X.map((x,i) => {
+    const fv = sol.fx(x), yf = y[i]*fv;
+    let status, cls;
+    if (sol.alpha[i] > 1e-4) {
+      const onSlack = !hard && yf < 1 - 1e-6;
+      status = "SUPPORT VECTOR" + (onSlack ? " (on slack ξ>0)" : "");
+      cls = onSlack ? "warn" : "sv";
+    } else if (yf >= 1) { status = "correct, not SV"; cls = "ok"; }
+    else if (yf > 0)    { status = "correct, inside margin"; cls = "warn"; }
+    else                { status = "MISCLASSIFIED"; cls = "bad"; }
+    return { i, x, y: y[i], f: fv, yf, alpha: sol.alpha[i], status, cls,
+             hinge: Math.max(0, 1 - yf) };
+  });
+  const totalHinge = pts.reduce((s,p) => s + p.hinge, 0);
+
+  const topic = (hard ? "HARD-MARGIN SVM" : "SOFT-MARGIN SVM (C = " + C + ")")
+              + (sol.isLinear ? "" : " with " + kernelName.toUpperCase() + " KERNEL");
+
+  const Kdesc = { linear: "K(xᵢ,xⱼ) = xᵢᵀxⱼ",
+    poly: "K(xᵢ,xⱼ) = (γxᵢᵀxⱼ + r)ᵈ",
+    rbf: "K(xᵢ,xⱼ) = exp(−γ‖xᵢ−xⱼ‖²)",
+    sigmoid: "K(xᵢ,xⱼ) = tanh(γxᵢᵀxⱼ + r)" }[kernelName];
+
+  return { X, y, C, hard, kernelName, kp, Kdesc, topic, sol, w, normW, margin,
+           pts, totalHinge, n, d };
+}
+
+/* ======================================================================
+   UI LAYER (browser only)
+   ====================================================================== */
+if (typeof document !== "undefined") (function () {
+
+  const fmt = v => {
+    if (v === null || v === undefined) return "—";
+    if (typeof v === "number") { const r = Math.round(v*1e4)/1e4;
+      return Object.is(r, -0) ? "0" : String(r); }
+    return String(v);
+  };
+  const vec = a => "(" + a.map(fmt).join(", ") + ")";
+  const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+
+  const DEMOS = {
+    1: { data: "2, 2 ; +1\n3, 3 ; +1\n3, 1 ; +1\n1, 2 ; -1\n0, 0 ; -1\n1, 0 ; -1",
+         ctype: "hard", kernel: "linear" },
+    2: { data: "2, 2 ; +1\n3, 3 ; +1\n2.5, 0.5 ; +1\n1, 2 ; -1\n0, 0 ; -1\n1.8, 1.8 ; -1",
+         ctype: "soft", cval: 1, kernel: "linear" },
+    3: { data: "1, 1 ; -1\n1, -1 ; +1\n-1, 1 ; +1\n-1, -1 ; -1",
+         ctype: "soft", cval: 10, kernel: "rbf", gamma: 1 },
+  };
+
+  const $ = id => document.getElementById(id);
+  $("ctype").addEventListener("change", e =>
+    $("crow").style.display = e.target.value === "soft" ? "flex" : "none");
+  document.querySelectorAll(".btn-demo").forEach(b => b.addEventListener("click", () => {
+    const dm = DEMOS[b.dataset.demo]; if (!dm) return;
+    $("data").value = dm.data; $("ctype").value = dm.ctype;
+    $("crow").style.display = dm.ctype === "soft" ? "flex" : "none";
+    if (dm.cval) $("cval").value = dm.cval;
+    $("kernel").value = dm.kernel;
+    if (dm.gamma !== undefined) $("gamma").value = dm.gamma;
+  }));
+
+  function readProblem() {
+    const lines = $("data").value.split("\n").map(l => l.trim()).filter(Boolean);
+    const X = [], y = [];
+    for (const ln of lines) {
+      const [xs, ys] = ln.split(";").map(s => s.trim());
+      if (!xs || !ys) throw new Error("Bad line (need 'x1, x2 ; y'): " + ln);
+      X.push(xs.split(",").map(Number));
+      y.push(Number(ys) >= 0 ? 1 : -1);
+    }
+    if (X.length < 2) throw new Error("Need at least 2 data points.");
+    if (X.some(row => row.some(isNaN))) throw new Error("Non-numeric input detected.");
+    const C = $("ctype").value === "hard" ? null : Math.max(1e-4, Number($("cval").value));
+    return { X, y, C,
+      kernelName: $("kernel").value,
+      kp: { g: Number($("gamma").value), r: Number($("coef").value),
+            d: Math.max(1, Math.round(Number($("deg").value))) } };
+  }
+
+  $("solve").addEventListener("click", () => {
+    let R;
+    try { R = buildReport(...(() => { const p = readProblem();
+        return [p.X, p.y, p.C, p.kernelName, p.kp]; })()); }
+    catch (e) { $("out").innerHTML = '<div class="placeholder">⚠️ ' + esc(e.message) + "</div>"; return; }
+    render(R);
+    $("predcard").style.display = "block";
+    window._R = R;
+    $("predout").style.display = "none";
+  });
+
+  $("predbtn").addEventListener("click", () => {
+    const R = window._R; if (!R) return;
+    let x;
+    try { x = $("newx").value.split(",").map(Number);
+          if (x.length !== R.d || x.some(isNaN)) throw 0; }
+    catch { $("predout").style.display = "block";
+            $("predout").innerHTML = "⚠️ enter " + R.d + " comma-separated numbers"; return; }
+    let f;
+    if (R.sol.isLinear) f = dot(R.w, x) + R.sol.b;
+    else f = R.sol.fx(x);
+    const cls = f >= 0 ? +1 : -1;
+    const how = R.sol.isLinear
+      ? "f(x*) = wᵀx* + b = " + vec(R.w) + "·" + vec(x) + " + (" + fmt(R.sol.b) + ") = <b>" + fmt(f) + "</b>"
+      : "f(x*) = ΣαᵢyᵢK(xᵢ,x*) + b = <b>" + fmt(f) + "</b>";
+    $("predout").style.display = "block";
+    $("predout").innerHTML = how + "<br>ŷ = sign(f(x*)) = <b style='color:var(--acc)'>" +
+      (cls > 0 ? "+1" : "−1") + "</b>" + (f >= 0 ? "  (positive side)" : "  (negative side)");
+  });
+
+  function render(R) {
+    const o = [];
+    const { sol } = R;
+
+    /* --- Section 1: topic ---------------------------------------- */
+    o.push(`<div class="step"><h3>1 · Topic</h3><div class="eq"><b>${R.topic}</b></div>
+      <p class="muted">Question answered: find the maximum-margin hyperplane — w, b,
+      support vectors, margin — and verify it against every training point.</p></div>`);
+
+    /* --- Section 2: given data ------------------------------------ */
+    let rows = R.X.map((x,i) => `<tr><td>x<sub>${i+1}</sub></td>
+      <td>${vec(x)}</td><td>${R.y[i] > 0 ? "+1" : "−1"}</td></tr>`).join("");
+    o.push(`<div class="step"><h3>2 · Given</h3>
+      <p class="muted">N = ${R.n} observations, d = ${R.d} features,
+      ${R.hard ? "linearly separable → hard margin" : "C = " + R.C + " → soft margin"}</p>
+      <table><tr><th>point</th><th>xᵢ</th><th>yᵢ</th></tr>${rows}</table></div>`);
+
+    /* --- Sections 8–10: primal, dual, KKT ------------------------- */
+    o.push(`<div class="step"><h3>8–10 · Primal → Dual → KKT</h3>
+      <div class="eq">min<sub>w,b${R.hard ? "" : ",ξ"}</sub> ½‖w‖²${R.hard ? "" : " + C·Σξᵢ"}
+        &nbsp;&nbsp;s.t.&nbsp;&nbsp; yᵢ(wᵀxᵢ + b) ≥ 1${R.hard ? "" : " − ξᵢ"}${R.hard ? "" : ",  ξᵢ ≥ 0"}</div>
+      <p class="muted">The constraint forces every point to be at least 1/‖w‖ away from the
+      boundary, so the margin 2/‖w‖ is maximized when ‖w‖² is minimized.</p>
+      <div class="eq">Lagrangian → dual:&nbsp; max<sub>α</sub> W(α) = Σαᵢ − ½ΣᵢΣⱼ αᵢαⱼ yᵢyⱼ ${esc(R.Kdesc.replace("K(xᵢ,xⱼ) = ",""))}
+        &nbsp;&nbsp;s.t.&nbsp;&nbsp; Σαᵢyᵢ = 0, ${R.hard ? "αᵢ ≥ 0" : "0 ≤ αᵢ ≤ C"}</div>
+      <div class="eq">KKT — stationarity: w = Σαᵢyᵢxᵢ &nbsp;·&nbsp; complementary slackness:
+        αᵢ[yᵢf(xᵢ) − 1${R.hard ? "" : " + ξᵢ"}] = 0</div>
+      <div class="eq">W(α*) = <b>${fmt(sol.W)}</b></div></div>`);
+
+    /* --- Sections 4–5, 9, 11: alpha, SVs, w, b -------------------- */
+    rows = R.pts.map(p => `<tr class="${p.alpha > 1e-4 ? "sv" : ""}">
+      <td>x<sub>${p.i+1}</sub></td><td>${fmt(p.alpha)}</td>
+      <td>${p.alpha > 1e-4 ? '<span class="tag sv">SV</span>' : '<span class="tag ok">—</span>'}</td></tr>`).join("");
+    let wEq;
+    if (R.sol.isLinear)
+      wEq = `w = Σαᵢyᵢxᵢ = ${vec(R.w)} &nbsp;&nbsp;⇒&nbsp;&nbsp; ‖w‖ = ${fmt(R.normW)}`;
+    else
+      wEq = `w lives in feature space (kernel trick) — used implicitly via ${esc(R.Kdesc)}`;
+    o.push(`<div class="step"><h3>4 · Lagrange Multipliers &amp; Support Vectors</h3>
+      <table><tr><th>point</th><th>αᵢ</th><th></th></tr>${rows}</table>
+      <p class="muted">Only points with αᵢ &gt; 0 matter — they lie exactly on the margin
+      (yᵢf = 1), or on slack in the soft-margin case. All other points could be deleted
+      without changing the solution.</p>
+      <div class="eq">${wEq}</div>
+      <div class="eq">b = yᵢ − f(xᵢ) over free SVs: [${sol.bCand.map(fmt).join(", ")}] →
+        b = <b>${fmt(sol.b)}</b></div></div>`);
+
+    /* --- Sections 5, 14: hyperplane + margin ----------------------- */
+    if (R.sol.isLinear) {
+      const terms = R.w.map((wj,j) => `(${fmt(wj)})·x${j+1}`).join(" + ");
+      o.push(`<div class="step"><h3>5 · Final Hyperplane &amp; Margin</h3>
+        <div class="eq">${terms} + (${fmt(sol.b)}) = 0</div>
+        <div class="eq">positive margin boundary: wᵀx + b = +1 &nbsp;&nbsp;|&nbsp;&nbsp;
+          negative margin boundary: wᵀx + b = −1</div>
+        <div class="eq">Margin = 2/‖w‖ = 2/${fmt(R.normW)} = <b>${fmt(R.margin)}</b></div></div>`);
+    } else {
+      o.push(`<div class="step"><h3>5 · Final Classifier</h3>
+        <div class="eq">f(x) = Σᵢ αᵢ yᵢ ${esc(R.Kdesc.replace("K(xᵢ,xⱼ)","K(xᵢ,x)"))} + ${fmt(sol.b)}</div>
+        <p class="muted">Margin is measured in feature space and not shown explicitly.</p></div>`);
+    }
+
+    /* --- Section 7: hinge loss ------------------------------------- */
+    rows = R.pts.map(p => `<tr><td>x<sub>${p.i+1}</sub></td>
+      <td>${fmt(p.f)}</td><td>${fmt(p.yf)}</td>
+      <td>max(0, 1 − ${fmt(p.yf)}) = ${fmt(p.hinge)}</td></tr>`).join("");
+    o.push(`<div class="step"><h3>7 · Hinge Loss</h3>
+      <table><tr><th>point</th><th>wᵀxᵢ+b</th><th>yᵢf(xᵢ)</th><th>Lᵢ</th></tr>${rows}</table>
+      <div class="eq">Σ Lᵢ = <b>${fmt(R.totalHinge)}</b>${R.hard ? "" :
+        ` &nbsp;&nbsp;⇒&nbsp;&nbsp; J = ½‖w‖² + C·ΣLᵢ = ${fmt(0.5*R.normW**2)} + ${R.C}·${fmt(R.totalHinge)} = <b>${fmt(0.5*R.normW**2 + R.C*R.totalHinge)}</b>`}</div></div>`);
+
+    /* --- Section 16: verification ----------------------------------- */
+    rows = R.pts.map(p => `<tr class="${p.cls === "bad" ? "bad" : p.cls === "sv" ? "sv" : ""}">
+      <td>x<sub>${p.i+1}</sub></td><td>${p.y > 0 ? "+1" : "−1"}</td>
+      <td>${fmt(p.f)}</td><td>${fmt(p.yf)}</td>
+      <td>${p.yf >= 1 ? "✓" : "✗"}</td>
+      <td style="text-align:left"><span class="tag ${p.cls}">${p.status}</span></td></tr>`).join("");
+    o.push(`<div class="step"><h3>16 · Verification Table</h3>
+      <table><tr><th>point</th><th>yᵢ</th><th>wᵀxᵢ+b</th><th>yᵢ(wᵀxᵢ+b)</th><th>≥1?</th><th>status</th></tr>${rows}</table>
+      <p class="muted">Hard margin requires yᵢf(xᵢ) ≥ 1 everywhere (margin = 2/‖w‖).
+      Soft margin allows yᵢf(xᵢ) = 1 − ξᵢ with ξᵢ &gt; 0, paying C·ξᵢ in the objective.</p></div>`);
+
+    /* --- Section 19: key idea --------------------------------------- */
+    o.push(`<div class="step"><h3>Key Idea</h3>
+      <p class="muted" style="font-size:.85rem">The SVM is the "widest street" between the two
+      classes: it maximizes the margin 2/‖w‖ subject to keeping every point on the correct side.
+      The dual shows only the points touching the street (αᵢ &gt; 0) — the support vectors —
+      determine w and b; the rest of the data is irrelevant. ${R.hard ? "" : "With soft margin, slack ξᵢ lets the street bend around outliers, and C trades margin width against violations."}
+      ${R.sol.isLinear ? "" : "The kernel computes inner products in a higher-dimensional space, letting a linear SVM separate what is nonlinear in the original space."}</p></div>`);
+
+    $("out").innerHTML = o.join("");
+    $("out").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+})();
+</script>
+</body>
+</html>
