@@ -448,7 +448,7 @@ if (typeof document !== "undefined") (function () {
       <td>max(0, 1 − ${fmt(p.yf)}) = ${fmt(p.hinge)}</td></tr>`).join("");
     o.push(`<div class="step"><h3>7 · Hinge Loss</h3>
       <table><tr><th>point</th><th>wᵀxᵢ+b</th><th>yᵢf(xᵢ)</th><th>Lᵢ</th></tr>${rows}</table>
-      <div class="eq">Σ Lᵢ = <b>${fmt(R.totalHinge)}</b>${R.hard ? "" :
+      <div class="eq">Σ Lᵢ = <b>${fmt(R.totalHinge)}</b>${(R.hard || !R.sol.isLinear) ? "" :
         ` &nbsp;&nbsp;⇒&nbsp;&nbsp; J = ½‖w‖² + C·ΣLᵢ = ${fmt(0.5*R.normW**2)} + ${R.C}·${fmt(R.totalHinge)} = <b>${fmt(0.5*R.normW**2 + R.C*R.totalHinge)}</b>`}</div></div>`);
 
     /* --- Section 16: verification ----------------------------------- */
